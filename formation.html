@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Formation interactive</title>
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+/* =====================================================================
+   CONTENU DE LA FORMATION — c'est la SEULE partie à modifier
+   ---------------------------------------------------------------------
+   type: "texte" -> réponse libre
+   type: "choix" -> une réponse parmi la liste "choix"
+                    "bonne" (facultatif) = numéro de la bonne réponse,
+                    en comptant à partir de 0 -> vert/rouge côté animateur
+   ===================================================================== */
+const FORMATION = {
+  titre: "Formation interactive — démonstration",
+  etapes: [
+    {
+      titre: "Bienvenue",
+      contenu: "<p>Cette formation se fait ensemble, en direct. Lisez chaque étape, répondez à la question, puis passez à la suivante.</p><p>Vos réponses sont transmises automatiquement à l'animateur.</p>",
+      question: "Qu'attendez-vous de cette séance ?",
+      type: "texte"
+    },
+    {
+      titre: "Le langage HTML",
+      contenu: "<p>Une page web est écrite en <strong>HTML</strong>. Ce langage décrit la structure de la page : titres, paragraphes, images, liens…</p>",
+      question: "Que signifie le sigle HTML ?",
+      type: "choix",
+      choix: [
+        "HyperText Markup Language",
+        "High Tech Modern Language",
+        "Home Tool Markup Language"
+      ],
+      bonne: 0
+    },
+    {
+      titre: "À vous de jouer",
+      contenu: "<p>En HTML, on utilise des <strong>balises</strong>. Par exemple, un paragraphe s'écrit <code>&lt;p&gt;Mon texte&lt;/p&gt;</code>.</p>",
+      question: "Écrivez la ligne HTML qui affiche le titre principal « Bonjour » (indice : balise h1).",
+      type: "texte"
+    }
+  ]
+};
+/* ===================== FIN DE LA PARTIE À MODIFIER ===================== */
+</script>
+<style>
+:root{--fond:#f4f5f7;--carte:#fff;--texte:#1d2433;--discret:#667085;--bord:#dde1e8;--accent:#2e5bff;--accent-fonce:#1f45d6;--accent-pale:#e8eeff;--ok:#16794c;--ok-pale:#e3f5ec;--ko:#b42318;--ko-pale:#fdecea;--attente:#9a6700;--attente-pale:#fff6dc;--rayon:12px}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--fond);color:var(--texte);line-height:1.55}
+.page{max-width:760px;margin:0 auto;padding:32px 16px 64px}
+.page.large{max-width:1400px}
+h1{font-size:1.6rem;margin:0 0 4px}
+h2{font-size:1.25rem;margin:0 0 12px}
+.sous-titre{color:var(--discret);margin:0 0 20px}
+.carte{background:var(--carte);border:1px solid var(--bord);border-radius:var(--rayon);padding:24px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+label{display:block;font-weight:600;margin:16px 0 6px}
+input[type=text],textarea{width:100%;padding:10px 12px;font:inherit;border:1px solid var(--bord);border-radius:8px;background:#fff;color:var(--texte)}
+textarea{min-height:110px;resize:vertical}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 18px;cursor:pointer;background:var(--accent);color:#fff}
+button:hover{background:var(--accent-fonce)}
+button.secondaire{background:transparent;color:var(--texte);border:1px solid var(--bord)}
+button.secondaire:hover{background:var(--fond)}
+button.danger{background:transparent;color:var(--ko);border:1px solid var(--ko)}
+button.danger:hover{background:var(--ko-pale)}
+.actions{display:flex;justify-content:space-between;gap:12px;margin-top:24px;flex-wrap:wrap}
+.message{margin-top:14px;padding:10px 12px;border-radius:8px;font-size:.95rem}
+.message.erreur{background:var(--ko-pale);color:var(--ko)}
+.cache{display:none!important}
+.statut{font-size:.9rem;padding:8px 12px;border-radius:8px;margin-bottom:16px;border:1px solid}
+.statut.ok{background:var(--ok-pale);color:var(--ok);border-color:#b7e2cb}
+.statut.attente{background:var(--attente-pale);color:var(--attente);border-color:#f1dc9c}
+.statut.ko{background:var(--ko-pale);color:var(--ko);border-color:#f5c2bd}
+.entete-tuto{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;color:var(--discret);font-size:.9rem}
+.barre{height:6px;background:var(--bord);border-radius:99px;overflow:hidden;margin-bottom:20px}
+.barre>div{height:100%;background:var(--accent);width:0;transition:width .3s}
+.contenu code{background:var(--fond);padding:1px 6px;border-radius:4px}
+.contenu img,.contenu video,.contenu iframe{max-width:100%}
+.question{font-weight:600;margin:20px 0 8px;padding-top:16px;border-top:1px solid var(--bord)}
+.choix label{display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:8px 0;padding:10px 12px;border:1px solid var(--bord);border-radius:8px;cursor:pointer}
+.choix label:has(input:checked){border-color:var(--accent);background:var(--accent-pale)}
+.choix input{margin-top:4px}
+.fin{text-align:center;padding:40px 24px}
+.fin .grand{font-size:2.5rem}
+.lien-discret{background:none;border:0;padding:0;color:var(--discret);text-decoration:underline;font-weight:400;font-size:.85rem}
+.lien-discret:hover{background:none;color:var(--texte)}
+/* Animateur */
+.partage{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:16px}
+.partage .code{font-size:1.8rem;font-weight:700;letter-spacing:.15em;color:var(--accent)}
+.partage .lien{flex:1;min-width:240px;font-family:ui-monospace,Consolas,monospace;font-size:.9rem;background:var(--fond);padding:10px 12px;border-radius:8px;word-break:break-all}
+.barre-admin{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.barre-admin .statut{margin:0 auto 0 0}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.stat{background:var(--carte);border:1px solid var(--bord);border-radius:var(--rayon);padding:12px 18px;min-width:140px}
+.stat b{display:block;font-size:1.5rem}
+.stat span{color:var(--discret);font-size:.85rem}
+.onglets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.onglets button{background:var(--carte);color:var(--texte);border:1px solid var(--bord);font-weight:500;padding:6px 12px}
+.onglets button.actif{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tableau-wrap{overflow-x:auto;background:var(--carte);border:1px solid var(--bord);border-radius:var(--rayon)}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--bord)}
+th{background:var(--fond);font-weight:600;white-space:nowrap}
+th.cliquable{cursor:pointer}
+th.cliquable:hover{color:var(--accent)}
+td.nom{font-weight:600;white-space:nowrap}
+td.reponse{min-width:180px;max-width:320px;white-space:pre-wrap;word-break:break-word}
+td.vide{color:var(--bord)}
+td.juste{background:var(--ok-pale)}
+td.faux{background:var(--ko-pale)}
+.point{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;background:var(--bord)}
+.point.on{background:var(--ok)}
+.heure{display:block;color:var(--discret);font-size:.78rem;margin-top:2px;font-weight:400}
+.liste-reponses{display:grid;gap:10px}
+.liste-reponses .item{background:var(--carte);border:1px solid var(--bord);border-radius:10px;padding:12px 14px}
+.liste-reponses .item.juste{border-left:4px solid var(--ok)}
+.liste-reponses .item.faux{border-left:4px solid var(--ko)}
+.liste-reponses .qui{font-weight:600;font-size:.9rem;margin-bottom:4px}
+.liste-reponses .txt{white-space:pre-wrap;word-break:break-word}
+.attente-txt{color:var(--discret);font-size:.9rem;margin-top:12px}
+</style>
+</head>
+<body>
+
+<!-- ======================= VUE PARTICIPANT ======================= -->
+<main id="vue-participant" class="page cache">
+  <h1 class="js-titre"></h1>
+  <p class="sous-titre" id="bonjour">Entrez votre nom et prénom pour commencer.</p>
+  <div id="p-statut" class="statut attente cache"></div>
+
+  <section id="ecran-accueil" class="carte">
+    <form id="form-accueil">
+      <div id="bloc-code" class="cache">
+        <label for="code-salle">Code de la salle <span style="font-weight:400;color:var(--discret)">(donné par l'animateur)</span></label>
+        <input type="text" id="code-salle" autocomplete="off" style="text-transform:uppercase;letter-spacing:.1em">
+      </div>
+      <label for="prenom">Prénom</label>
+      <input type="text" id="prenom" autocomplete="given-name" maxlength="80" required>
+      <label for="nom">Nom</label>
+      <input type="text" id="nom" autocomplete="family-name" maxlength="80" required>
+      <div class="actions"><span></span><button type="submit">Commencer</button></div>
+      <div id="msg-accueil" class="message erreur cache"></div>
+    </form>
+  </section>
+
+  <section id="ecran-etape" class="carte cache">
+    <div class="entete-tuto"><span id="num-etape"></span><span id="qui"></span></div>
+    <div class="barre"><div id="progression"></div></div>
+    <h2 id="titre-etape"></h2>
+    <div class="contenu" id="contenu-etape"></div>
+    <div class="question" id="question-etape"></div>
+    <div id="zone-reponse"></div>
+    <div class="actions">
+      <button type="button" class="secondaire" id="btn-precedent">← Précédent</button>
+      <button type="button" id="btn-suivant">Valider et continuer →</button>
+    </div>
+    <div id="msg-etape" class="message erreur cache"></div>
+  </section>
+
+  <section id="ecran-fin" class="carte fin cache">
+    <div class="grand">✓</div>
+    <h2>Merci, c'est terminé !</h2>
+    <p id="fin-texte"></p>
+    <button type="button" class="secondaire" id="btn-revoir">Revoir mes réponses</button>
+  </section>
+
+  <p style="text-align:center;margin-top:24px">
+    <button type="button" class="lien-discret cache" id="btn-changer">Ce n'est pas moi / recommencer</button>
+  </p>
+</main>
+
+<!-- ======================= VUE ANIMATEUR ======================= -->
+<main id="vue-admin" class="page large cache">
+  <h1>Tableau de bord animateur</h1>
+  <p class="sous-titre js-titre-admin"></p>
+
+  <div class="carte partage">
+    <div>
+      <div style="color:var(--discret);font-size:.85rem">Code de la salle</div>
+      <div class="code" id="a-code">——</div>
+    </div>
+    <div class="lien" id="a-lien"></div>
+    <button type="button" id="btn-copier">Copier le lien à partager</button>
+  </div>
+
+  <div class="barre-admin">
+    <div id="a-statut" class="statut attente">Ouverture de la salle…</div>
+    <button type="button" class="secondaire" id="btn-csv">Exporter (CSV)</button>
+    <button type="button" class="danger" id="btn-nouvelle">Nouvelle session</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="nb-participants">0</b><span>participants</span></div>
+    <div class="stat"><b id="nb-enligne">0</b><span>connectés</span></div>
+    <div class="stat"><b id="nb-termine">0</b><span>ont terminé</span></div>
+  </div>
+
+  <div class="onglets" id="onglets"></div>
+  <div id="vue"></div>
+</main>
+
+<script>
+/* ===================== Réglages techniques (ne pas modifier) ===================== */
+const PREFIXE_SALLE = "formation-interactive-";   // préfixe des salles sur le serveur PeerJS
+const PEERJS_OPTIONS = {};                         // vide = serveur public gratuit de PeerJS
+const ETAPES = FORMATION.etapes;
+const $ = (id) => document.getElementById(id);
+
+function lire(cle) { try { return JSON.parse(localStorage.getItem(cle)); } catch (e) { return null; } }
+function ecrire(cle, val) { try { localStorage.setItem(cle, JSON.stringify(val)); } catch (e) {} }
+function effacer(cle) { try { localStorage.removeItem(cle); } catch (e) {} }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function txt(v, max) { return String(v == null ? "" : v).slice(0, max); }
+function maintenant() { return new Date().toISOString(); }
+function heure(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+function nettoyerCode(c) { return String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12); }
+function statut(el, texte, type) { el.textContent = texte; el.className = "statut " + type; }
+
+document.title = FORMATION.titre;
+document.querySelectorAll(".js-titre").forEach(e => e.textContent = FORMATION.titre);
+document.querySelectorAll(".js-titre-admin").forEach(e => e.textContent = FORMATION.titre + " — réponses des participants en direct.");
+
+const params = new URLSearchParams(location.search);
+if (typeof Peer === "undefined") {
+  document.body.innerHTML = '<main class="page"><div class="carte">Impossible de charger le module de connexion. Vérifiez votre connexion internet puis rechargez la page.</div></main>';
+} else if (params.has("admin")) {
+  demarrerAnimateur();
+} else {
+  demarrerParticipant();
+}
+
+/* ============================================================================
+   PARTICIPANT
+   ============================================================================ */
+function demarrerParticipant() {
+  $("vue-participant").classList.remove("cache");
+
+  let salle = nettoyerCode(params.get("salle"));
+  let session = null;
+  let peer = null, conn = null, connecte = false, versionRecue = 0;
+
+  const cleSession = () => "formation-participant-" + salle;
+  const sauver = () => ecrire(cleSession(), session);
+
+  if (!salle) $("bloc-code").classList.remove("cache");
+  else session = lire(cleSession());
+
+  if (session && session.id) { reprendre(); }
+  else afficher("ecran-accueil");
+
+  function afficher(ecran) {
+    ["ecran-accueil", "ecran-etape", "ecran-fin"].forEach(id => $(id).classList.toggle("cache", id !== ecran));
+    $("btn-changer").classList.toggle("cache", ecran === "ecran-accueil");
+    if (ecran === "ecran-fin") majStatut();
+  }
+
+  function reprendre() {
+    $("bonjour").textContent = "Bonjour " + session.prenom + " !";
+    if (session.etape >= ETAPES.length) afficher("ecran-fin"); else afficherEtape();
+    connecter();
+  }
+
+  $("form-accueil").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!salle) {
+      const c = nettoyerCode($("code-salle").value);
+      if (!c) { $("msg-accueil").textContent = "Indiquez le code de la salle donné par l'animateur."; $("msg-accueil").classList.remove("cache"); return; }
+      salle = c;
+      history.replaceState(null, "", location.pathname + "?salle=" + salle);
+      $("bloc-code").classList.add("cache");
+    }
+    const prenom = $("prenom").value.trim(), nom = $("nom").value.trim();
+    if (!prenom || !nom) return;
+    $("msg-accueil").classList.add("cache");
+    session = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
+      prenom: txt(prenom, 80), nom: txt(nom, 80), etape: 0, reponses: {}, v: 1
+    };
+    sauver();
+    reprendre();
+  });
+
+  // ----- Connexion à l'animateur, avec reconnexion automatique -----
+  function connecter() {
+    if (peer) return;
+    peer = new Peer(PEERJS_OPTIONS);
+    peer.on("open", ouvrirConnexion);
+    peer.on("error", () => { connecte = false; majStatut(); });
+    peer.on("disconnected", () => setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000));
+    setInterval(() => {                         // surveillance toutes les 5 s
+      if (conn && conn.open) return;
+      if (peer.destroyed) return;
+      if (peer.disconnected) { peer.reconnect(); return; }
+      if (peer.open) ouvrirConnexion();
+    }, 5000);
+    majStatut();
+  }
+
+  function ouvrirConnexion() {
+    if (conn && conn.open) return;
+    if (conn) { try { conn.close(); } catch (e) {} }
+    const c = peer.connect(PREFIXE_SALLE + salle, { reliable: true });
+    conn = c;
+    c.on("open", () => { if (conn !== c) return; connecte = true; envoyerEtat(); majStatut(); });
+    c.on("data", (d) => {
+      if (d && d.type === "ok" && typeof d.v === "number") { versionRecue = Math.max(versionRecue, d.v); majStatut(); }
+    });
+    const perdu = () => { if (conn !== c) return; connecte = false; majStatut(); };
+    c.on("close", perdu);
+    c.on("error", perdu);
+  }
+
+  // Envoie TOUTES les réponses à chaque fois : rien ne se perd après une coupure
+  function envoyerEtat() {
+    if (!conn || !conn.open || !session) return;
+    try {
+      conn.send({ type: "etat", id: session.id, nom: session.nom, prenom: session.prenom, reponses: session.reponses, v: session.v });
+    } catch (e) { connecte = false; }
+    majStatut();
+  }
+
+  function majStatut() {
+    if (!session) return;
+    const el = $("p-statut");
+    const aJour = versionRecue >= session.v;
+    if (!connecte) statut(el, "⏳ Connexion à l'animateur… Vous pouvez continuer : vos réponses seront envoyées automatiquement.", "attente");
+    else if (aJour) statut(el, "✅ Connecté à l'animateur — réponses bien reçues", "ok");
+    else statut(el, "🔄 Envoi de vos réponses…", "attente");
+    $("fin-texte").textContent = (connecte && aJour)
+      ? "Toutes vos réponses ont bien été reçues par l'animateur."
+      : "Vos réponses n'ont pas encore toutes été reçues. Gardez cette page ouverte quelques instants.";
+  }
+
+  // ----- Étapes -----
+  function afficherEtape() {
+    const i = session.etape, e = ETAPES[i];
+    afficher("ecran-etape");
+    $("msg-etape").classList.add("cache");
+    $("num-etape").textContent = "Étape " + (i + 1) + " / " + ETAPES.length;
+    $("qui").textContent = session.prenom + " " + session.nom;
+    $("progression").style.width = (i / ETAPES.length * 100) + "%";
+    $("titre-etape").textContent = e.titre;
+    $("contenu-etape").innerHTML = e.contenu;     // contenu écrit par l'auteur de la formation
+    $("question-etape").textContent = e.question;
+    $("btn-precedent").style.visibility = i === 0 ? "hidden" : "visible";
+    $("btn-suivant").textContent = i === ETAPES.length - 1 ? "Valider et terminer ✓" : "Valider et continuer →";
+
+    const deja = session.reponses[i] ? session.reponses[i].reponse : "";
+    const zone = $("zone-reponse");
+    zone.innerHTML = "";
+    if (e.type === "choix") {
+      const div = document.createElement("div");
+      div.className = "choix";
+      e.choix.forEach((c) => {
+        const lab = document.createElement("label"), inp = document.createElement("input");
+        inp.type = "radio"; inp.name = "rep"; inp.value = c; inp.checked = deja === c;
+        lab.appendChild(inp); lab.appendChild(document.createTextNode(c));
+        div.appendChild(lab);
+      });
+      zone.appendChild(div);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.id = "rep-texte"; ta.maxLength = 5000; ta.placeholder = "Votre réponse…"; ta.value = deja;
+      zone.appendChild(ta);
+    }
+    window.scrollTo(0, 0);
+  }
+
+  $("btn-suivant").addEventListener("click", () => {
+    const e = ETAPES[session.etape];
+    let rep = "";
+    if (e.type === "choix") { const c = document.querySelector('input[name="rep"]:checked'); rep = c ? c.value : ""; }
+    else rep = $("rep-texte").value.trim();
+    if (!rep) { $("msg-etape").textContent = "Merci de répondre avant de continuer."; $("msg-etape").classList.remove("cache"); return; }
+
+    const avant = session.reponses[session.etape];
+    if (!avant || avant.reponse !== rep) {
+      session.reponses[session.etape] = { reponse: rep, t: maintenant() };
+      session.v++;
+    }
+    session.etape++;
+    sauver();
+    envoyerEtat();
+    if (session.etape >= ETAPES.length) afficher("ecran-fin"); else afficherEtape();
+  });
+
+  $("btn-precedent").addEventListener("click", () => {
+    if (session.etape > 0) { session.etape--; sauver(); afficherEtape(); }
+  });
+  $("btn-revoir").addEventListener("click", () => { session.etape = 0; sauver(); afficherEtape(); });
+  $("btn-changer").addEventListener("click", () => {
+    if (!confirm("Recommencer avec un autre nom ? Les réponses déjà envoyées restent chez l'animateur.")) return;
+    effacer(cleSession());
+    location.reload();
+  });
+}
+
+/* ============================================================================
+   ANIMATEUR
+   ============================================================================ */
+function demarrerAnimateur() {
+  $("vue-admin").classList.remove("cache");
+
+  let salle = lire("formation-animateur-salle");
+  if (!salle) { salle = nouveauCode(); ecrire("formation-animateur-salle", salle); }
+  let participants = lire("formation-animateur-" + salle) || {};   // id -> {nom, prenom, arrivee, reponses}
+  const enLigne = {};                                                // id -> nombre de connexions ouvertes
+  let peer = null, tentatives = 0, vueActive = "tout", rendu = null;
+
+  function nouveauCode() {
+    const alpha = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const a = new Uint32Array(6); crypto.getRandomValues(a);
+    return Array.from(a, n => alpha[n % alpha.length]).join("");
+  }
+  const lienPartage = () => location.origin + location.pathname + "?salle=" + salle;
+  const sauver = () => ecrire("formation-animateur-" + salle, participants);
+
+  function afficherSalle() {
+    $("a-code").textContent = salle;
+    $("a-lien").textContent = lienPartage();
+  }
+
+  // ----- Ouverture de la salle -----
+  function ouvrirSalle() {
+    afficherSalle();
+    statut($("a-statut"), "Ouverture de la salle…", "attente");
+    peer = new Peer(PREFIXE_SALLE + salle, PEERJS_OPTIONS);
+
+    peer.on("open", () => { tentatives = 0; statut($("a-statut"), "🟢 Salle ouverte — les participants peuvent se connecter", "ok"); });
+
+    peer.on("connection", (c) => {
+      c.on("data", (d) => recevoir(c, d));
+      const fin = () => {
+        if (c._ferme) return; c._ferme = true;
+        if (c._idPart) { enLigne[c._idPart] = Math.max(0, (enLigne[c._idPart] || 1) - 1); dessiner(); }
+      };
+      c.on("close", fin);
+      c.on("error", fin);
+    });
+
+    peer.on("disconnected", () => {
+      statut($("a-statut"), "⏳ Connexion au serveur perdue — reconnexion…", "attente");
+      setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000);
+    });
+
+    peer.on("error", (err) => {
+      if (err.type === "unavailable-id") {
+        // La salle est encore réservée (page rechargée) ou ouverte dans un autre onglet
+        peer.destroy();
+        tentatives++;
+        if (tentatives <= 10) {
+          statut($("a-statut"), "⏳ Reprise de la salle… (si ce tableau de bord est ouvert dans un autre onglet, fermez-le)", "attente");
+          setTimeout(ouvrirSalle, 3000);
+        } else {
+          statut($("a-statut"), "🔴 Cette salle est déjà ouverte ailleurs. Fermez l'autre onglet puis rechargez, ou cliquez sur « Nouvelle session ».", "ko");
+        }
+      } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
+        statut($("a-statut"), "⏳ Problème de connexion internet — nouvel essai…", "attente");
+        if (!peer.destroyed && peer.disconnected) setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 3000);
+      }
+      // "peer-unavailable" etc. : sans importance côté animateur
+    });
+  }
+
+  // Libère la salle immédiatement si la page est rechargée ou fermée
+  window.addEventListener("beforeunload", () => { if (peer) peer.destroy(); });
+
+  // ----- Réception des réponses (tout est contrôlé et nettoyé) -----
+  function recevoir(c, d) {
+    if (!d || d.type !== "etat") return;
+    const id = txt(d.id, 40);
+    if (!id) return;
+    if (!c._idPart) { c._idPart = id; enLigne[id] = (enLigne[id] || 0) + 1; }
+
+    const p = participants[id] || { arrivee: maintenant(), reponses: {} };
+    p.nom = txt(d.nom, 80); p.prenom = txt(d.prenom, 80);
+    if (d.reponses && typeof d.reponses === "object") {
+      Object.keys(d.reponses).forEach(k => {
+        const i = Number(k), r = d.reponses[k];
+        if (Number.isInteger(i) && i >= 0 && i < ETAPES.length && r && typeof r === "object") {
+          p.reponses[i] = { reponse: txt(r.reponse, 5000), t: txt(r.t, 40) };
+        }
+      });
+    }
+    participants[id] = p;
+    sauver();
+    if (typeof d.v === "number") { try { c.send({ type: "ok", v: d.v }); } catch (e) {} }
+    dessiner();
+  }
+
+  // ----- Affichage -----
+  function correction(i, rep) {
+    const e = ETAPES[i];
+    if (!e || e.type !== "choix" || typeof e.bonne !== "number") return "";
+    return rep === e.choix[e.bonne] ? "juste" : "faux";
+  }
+  function liste() {
+    return Object.keys(participants).map(id => Object.assign({ id }, participants[id]))
+      .sort((a, b) => (a.nom + " " + a.prenom).localeCompare(b.nom + " " + b.prenom, "fr"));
+  }
+
+  function dessiner() {                       // regroupe les rafraîchissements
+    if (rendu) return;
+    rendu = requestAnimationFrame(() => { rendu = null; dessinerMaintenant(); });
+  }
+  function dessinerMaintenant() {
+    const ps = liste();
+    $("nb-participants").textContent = ps.length;
+    $("nb-enligne").textContent = ps.filter(p => enLigne[p.id] > 0).length;
+    $("nb-termine").textContent = ps.filter(p => Object.keys(p.reponses).length >= ETAPES.length).length;
+
+    let o = '<button type="button" data-vue="tout" class="' + (vueActive === "tout" ? "actif" : "") + '">Vue d\'ensemble</button>';
+    ETAPES.forEach((e, i) => {
+      o += '<button type="button" data-vue="' + i + '" class="' + (vueActive === i ? "actif" : "") + '">Étape ' + (i + 1)
+         + " (" + ps.filter(p => p.reponses[i]).length + ")</button>";
+    });
+    $("onglets").innerHTML = o;
+
+    if (!ps.length) { $("vue").innerHTML = '<p class="attente-txt">En attente des participants… Partagez le lien ci-dessus dans Teams.</p>'; return; }
+    $("vue").innerHTML = vueActive === "tout" ? tableau(ps) : parEtape(ps, vueActive);
+  }
+
+  function tableau(ps) {
+    let h = '<div class="tableau-wrap"><table><thead><tr><th>Participant</th><th>Avancement</th>';
+    ETAPES.forEach((e, i) => { h += '<th class="cliquable" data-vue="' + i + '" title="Voir toutes les réponses">' + (i + 1) + ". " + esc(e.titre) + "</th>"; });
+    h += "</tr></thead><tbody>";
+    ps.forEach(p => {
+      h += '<tr><td class="nom"><span class="point' + (enLigne[p.id] > 0 ? " on" : "") + '"></span>' + esc(p.prenom) + " " + esc(p.nom)
+         + '<span class="heure">arrivée : ' + heure(p.arrivee) + "</span></td><td>" + Object.keys(p.reponses).length + " / " + ETAPES.length + "</td>";
+      ETAPES.forEach((e, i) => {
+        const r = p.reponses[i];
+        h += r ? '<td class="reponse ' + correction(i, r.reponse) + '">' + esc(r.reponse) + '<span class="heure">' + heure(r.t) + "</span></td>"
+               : '<td class="reponse vide">—</td>';
+      });
+      h += "</tr>";
+    });
+    return h + "</tbody></table></div>";
+  }
+
+  function parEtape(ps, i) {
+    const e = ETAPES[i], ont = ps.filter(p => p.reponses[i]), attendent = ps.filter(p => !p.reponses[i]);
+    let h = '<div class="carte" style="margin-bottom:12px"><h2>Étape ' + (i + 1) + " — " + esc(e.titre) + '</h2><p style="margin:0"><strong>Question :</strong> ' + esc(e.question) + "</p>";
+    if (e.type === "choix" && typeof e.bonne === "number") {
+      h += '<p style="margin:8px 0 0">Bonne réponse : <strong>' + esc(e.choix[e.bonne]) + "</strong> · "
+         + ont.filter(p => correction(i, p.reponses[i].reponse) === "juste").length + " / " + ont.length + " juste(s)</p>";
+    }
+    h += "</div>";
+    if (e.type === "choix") {
+      h += '<div class="carte" style="margin-bottom:12px">';
+      e.choix.forEach((c, k) => {
+        const n = ont.filter(p => p.reponses[i].reponse === c).length, pct = ont.length ? Math.round(n / ont.length * 100) : 0;
+        h += '<div style="margin:6px 0"><div style="display:flex;justify-content:space-between"><span>' + esc(c) + (k === e.bonne ? " ✓" : "")
+           + "</span><span>" + n + '</span></div><div class="barre" style="margin:4px 0 0"><div style="width:' + pct + '%"></div></div></div>';
+      });
+      h += "</div>";
+    }
+    h += '<div class="liste-reponses">';
+    ont.forEach(p => {
+      const r = p.reponses[i];
+      h += '<div class="item ' + correction(i, r.reponse) + '"><div class="qui">' + esc(p.prenom) + " " + esc(p.nom)
+         + ' <span class="heure" style="display:inline">· ' + heure(r.t) + '</span></div><div class="txt">' + esc(r.reponse) + "</div></div>";
+    });
+    h += "</div>";
+    if (attendent.length) h += '<p class="attente-txt">Pas encore répondu : ' + attendent.map(p => esc(p.prenom) + " " + esc(p.nom)).join(", ") + "</p>";
+    return h;
+  }
+
+  // ----- Interactions -----
+  document.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-vue]");
+    if (!b || !$("vue-admin").contains(b)) return;
+    vueActive = b.dataset.vue === "tout" ? "tout" : Number(b.dataset.vue);
+    dessiner();
+  });
+
+  $("btn-copier").addEventListener("click", async () => {
+    const lien = lienPartage();
+    try { await navigator.clipboard.writeText(lien); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents($("a-lien")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy"); }
+    $("btn-copier").textContent = "Lien copié ✓";
+    setTimeout(() => $("btn-copier").textContent = "Copier le lien à partager", 2000);
+  });
+
+  $("btn-csv").addEventListener("click", () => {
+    const cell = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+    const lignes = [["Prénom", "Nom"].concat(ETAPES.map((e, i) => (i + 1) + ". " + e.titre)).map(cell).join(";")];
+    liste().forEach(p => lignes.push([p.prenom, p.nom].concat(ETAPES.map((e, i) => p.reponses[i] ? p.reponses[i].reponse : "")).map(cell).join(";")));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + lignes.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = "reponses-" + salle + "-" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  $("btn-nouvelle").addEventListener("click", () => {
+    if (!confirm("Démarrer une nouvelle session ?\n\n• Un nouveau code et un nouveau lien seront créés.\n• Les réponses actuelles seront effacées (exportez-les en CSV avant si besoin).")) return;
+    effacer("formation-animateur-" + salle);
+    if (peer) peer.destroy();
+    salle = nouveauCode();
+    ecrire("formation-animateur-salle", salle);
+    participants = {};
+    Object.keys(enLigne).forEach(k => delete enLigne[k]);
+    vueActive = "tout"; tentatives = 0;
+    ouvrirSalle();
+    dessiner();
+  });
+
+  ouvrirSalle();
+  dessiner();
+}
+</script>
+</body>
+</html>
