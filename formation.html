@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Formation interactive</title>
-<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script>
 /* =====================================================================
    CONTENU DE LA FORMATION — c'est la SEULE partie à modifier
@@ -194,8 +193,8 @@ td.faux{background:var(--ko-pale)}
 
   <div class="stats">
     <div class="stat"><b id="nb-participants">0</b><span>participants</span></div>
-    <div class="stat"><b id="nb-enligne">0</b><span>connectés</span></div>
     <div class="stat"><b id="nb-termine">0</b><span>ont terminé</span></div>
+    <div class="stat"><b id="nb-reponses">0</b><span>réponses reçues</span></div>
   </div>
 
   <div class="onglets" id="onglets"></div>
@@ -204,8 +203,9 @@ td.faux{background:var(--ko-pale)}
 
 <script>
 /* ===================== Réglages techniques (ne pas modifier) ===================== */
-const PREFIXE_SALLE = "formation-interactive-";   // préfixe des salles sur le serveur PeerJS
-const PEERJS_OPTIONS = {};                         // vide = serveur public gratuit de PeerJS
+const SERVEUR = "https://ntfy.sh";                 // service public gratuit qui transmet les messages
+const PREFIXE_SALLE = "formation-interactive-";    // préfixe des salles sur ce service
+const MAX_REPONSE = 1500;                          // caractères max par réponse libre
 const ETAPES = FORMATION.etapes;
 const $ = (id) => document.getElementById(id);
 
@@ -224,9 +224,9 @@ document.querySelectorAll(".js-titre").forEach(e => e.textContent = FORMATION.ti
 document.querySelectorAll(".js-titre-admin").forEach(e => e.textContent = FORMATION.titre + " — réponses des participants en direct.");
 
 const params = new URLSearchParams(location.search);
-if (typeof Peer === "undefined") {
-  document.body.innerHTML = '<main class="page"><div class="carte">Impossible de charger le module de connexion. Vérifiez votre connexion internet puis rechargez la page.</div></main>';
-} else if (params.has("admin")) {
+const adresseSalle = (code) => SERVEUR + "/" + PREFIXE_SALLE + code;
+const joliCode = (code) => code.length === 8 ? code.slice(0, 4) + "-" + code.slice(4) : code;
+if (params.has("admin")) {
   demarrerAnimateur();
 } else {
   demarrerParticipant();
@@ -240,7 +240,7 @@ function demarrerParticipant() {
 
   let salle = nettoyerCode(params.get("salle"));
   let session = null;
-  let peer = null, conn = null, connecte = false, versionRecue = 0;
+  let envoiEnCours = false, enErreur = false, surveillance = null;
 
   const cleSession = () => "formation-participant-" + salle;
   const sauver = () => ecrire(cleSession(), session);
@@ -260,7 +260,9 @@ function demarrerParticipant() {
   function reprendre() {
     $("bonjour").textContent = "Bonjour " + session.prenom + " !";
     if (session.etape >= ETAPES.length) afficher("ecran-fin"); else afficherEtape();
-    connecter();
+    if (!Array.isArray(session.file)) session.file = [];
+    if (!surveillance) surveillance = setInterval(envoyerFile, 5000);   // renvoi automatique
+    envoyerFile();
   }
 
   $("form-accueil").addEventListener("submit", (ev) => {
@@ -277,61 +279,50 @@ function demarrerParticipant() {
     $("msg-accueil").classList.add("cache");
     session = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
-      prenom: txt(prenom, 80), nom: txt(nom, 80), etape: 0, reponses: {}, v: 1
+      prenom: txt(prenom, 80), nom: txt(nom, 80), etape: 0, reponses: {}, file: []
     };
-    sauver();
+    ajouterMessage({ type: "arrivee" });       // signale l'arrivée à l'animateur
     reprendre();
   });
 
-  // ----- Connexion à l'animateur, avec reconnexion automatique -----
-  function connecter() {
-    if (peer) return;
-    peer = new Peer(PEERJS_OPTIONS);
-    peer.on("open", ouvrirConnexion);
-    peer.on("error", () => { connecte = false; majStatut(); });
-    peer.on("disconnected", () => setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000));
-    setInterval(() => {                         // surveillance toutes les 5 s
-      if (conn && conn.open) return;
-      if (peer.destroyed) return;
-      if (peer.disconnected) { peer.reconnect(); return; }
-      if (peer.open) ouvrirConnexion();
-    }, 5000);
+  // ----- Envoi des messages, dans l'ordre, avec renvoi automatique -----
+  function ajouterMessage(m) {
+    session.file.push(Object.assign({ id: session.id, nom: session.nom, prenom: session.prenom, t: maintenant() }, m));
+    sauver();
+    envoyerFile();
+  }
+
+  async function envoyerFile() {
+    if (!session || envoiEnCours) return;
     majStatut();
-  }
-
-  function ouvrirConnexion() {
-    if (conn && conn.open) return;
-    if (conn) { try { conn.close(); } catch (e) {} }
-    const c = peer.connect(PREFIXE_SALLE + salle, { reliable: true });
-    conn = c;
-    c.on("open", () => { if (conn !== c) return; connecte = true; envoyerEtat(); majStatut(); });
-    c.on("data", (d) => {
-      if (d && d.type === "ok" && typeof d.v === "number") { versionRecue = Math.max(versionRecue, d.v); majStatut(); }
-    });
-    const perdu = () => { if (conn !== c) return; connecte = false; majStatut(); };
-    c.on("close", perdu);
-    c.on("error", perdu);
-  }
-
-  // Envoie TOUTES les réponses à chaque fois : rien ne se perd après une coupure
-  function envoyerEtat() {
-    if (!conn || !conn.open || !session) return;
+    if (!session.file.length) return;
+    envoiEnCours = true;
     try {
-      conn.send({ type: "etat", id: session.id, nom: session.nom, prenom: session.prenom, reponses: session.reponses, v: session.v });
-    } catch (e) { connecte = false; }
-    majStatut();
+      while (session.file.length) {
+        const res = await fetch(adresseSalle(salle), { method: "POST", body: JSON.stringify(session.file[0]) });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        session.file.shift();
+        sauver();
+      }
+      enErreur = false;
+    } catch (e) {
+      enErreur = true;                           // nouvel essai dans 5 secondes
+    } finally {
+      envoiEnCours = false;
+      majStatut();
+    }
   }
 
   function majStatut() {
     if (!session) return;
     const el = $("p-statut");
-    const aJour = versionRecue >= session.v;
-    if (!connecte) statut(el, "⏳ Connexion à l'animateur… Vous pouvez continuer : vos réponses seront envoyées automatiquement.", "attente");
-    else if (aJour) statut(el, "✅ Connecté à l'animateur — réponses bien reçues", "ok");
+    const envoye = !session.file.length;
+    if (envoye) statut(el, "✅ Réponses bien transmises à l'animateur", "ok");
+    else if (enErreur) statut(el, "⏳ Problème de connexion — nouvel essai automatique… Vous pouvez continuer.", "attente");
     else statut(el, "🔄 Envoi de vos réponses…", "attente");
-    $("fin-texte").textContent = (connecte && aJour)
-      ? "Toutes vos réponses ont bien été reçues par l'animateur."
-      : "Vos réponses n'ont pas encore toutes été reçues. Gardez cette page ouverte quelques instants.";
+    $("fin-texte").textContent = envoye
+      ? "Toutes vos réponses ont bien été transmises à l'animateur."
+      : "Vos réponses n'ont pas encore toutes été transmises. Gardez cette page ouverte quelques instants.";
   }
 
   // ----- Étapes -----
@@ -363,7 +354,7 @@ function demarrerParticipant() {
       zone.appendChild(div);
     } else {
       const ta = document.createElement("textarea");
-      ta.id = "rep-texte"; ta.maxLength = 5000; ta.placeholder = "Votre réponse…"; ta.value = deja;
+      ta.id = "rep-texte"; ta.maxLength = MAX_REPONSE; ta.placeholder = "Votre réponse…"; ta.value = deja;
       zone.appendChild(ta);
     }
     window.scrollTo(0, 0);
@@ -376,14 +367,13 @@ function demarrerParticipant() {
     else rep = $("rep-texte").value.trim();
     if (!rep) { $("msg-etape").textContent = "Merci de répondre avant de continuer."; $("msg-etape").classList.remove("cache"); return; }
 
-    const avant = session.reponses[session.etape];
-    if (!avant || avant.reponse !== rep) {
-      session.reponses[session.etape] = { reponse: rep, t: maintenant() };
-      session.v++;
-    }
+    rep = txt(rep, MAX_REPONSE);
+    const i = session.etape, avant = session.reponses[i];
     session.etape++;
-    sauver();
-    envoyerEtat();
+    if (!avant || avant.reponse !== rep) {
+      session.reponses[i] = { reponse: rep, t: maintenant() };
+      ajouterMessage({ type: "rep", etape: i, reponse: rep });
+    } else sauver();
     if (session.etape >= ETAPES.length) afficher("ecran-fin"); else afficherEtape();
   });
 
@@ -405,89 +395,62 @@ function demarrerAnimateur() {
   $("vue-admin").classList.remove("cache");
 
   let salle = lire("formation-animateur-salle");
-  if (!salle) { salle = nouveauCode(); ecrire("formation-animateur-salle", salle); }
+  if (!salle || salle.length !== 8) { salle = nouveauCode(); ecrire("formation-animateur-salle", salle); }
   let participants = lire("formation-animateur-" + salle) || {};   // id -> {nom, prenom, arrivee, reponses}
-  const enLigne = {};                                                // id -> nombre de connexions ouvertes
-  let peer = null, tentatives = 0, vueActive = "tout", rendu = null;
+  let flux = null, dernierId = null, vus = new Set(), vueActive = "tout", rendu = null;
 
   function nouveauCode() {
     const alpha = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    const a = new Uint32Array(6); crypto.getRandomValues(a);
+    const a = new Uint32Array(8); crypto.getRandomValues(a);
     return Array.from(a, n => alpha[n % alpha.length]).join("");
   }
   const lienPartage = () => location.origin + location.pathname + "?salle=" + salle;
   const sauver = () => ecrire("formation-animateur-" + salle, participants);
 
   function afficherSalle() {
-    $("a-code").textContent = salle;
+    $("a-code").textContent = joliCode(salle);
     $("a-lien").textContent = lienPartage();
   }
 
-  // ----- Ouverture de la salle -----
+  // ----- Écoute des réponses en direct (les messages des 12 dernières heures sont récupérés) -----
   function ouvrirSalle() {
     afficherSalle();
-    statut($("a-statut"), "Ouverture de la salle…", "attente");
-    peer = new Peer(PREFIXE_SALLE + salle, PEERJS_OPTIONS);
-
-    peer.on("open", () => { tentatives = 0; statut($("a-statut"), "🟢 Salle ouverte — les participants peuvent se connecter", "ok"); });
-
-    peer.on("connection", (c) => {
-      c.on("data", (d) => recevoir(c, d));
-      const fin = () => {
-        if (c._ferme) return; c._ferme = true;
-        if (c._idPart) { enLigne[c._idPart] = Math.max(0, (enLigne[c._idPart] || 1) - 1); dessiner(); }
-      };
-      c.on("close", fin);
-      c.on("error", fin);
-    });
-
-    peer.on("disconnected", () => {
-      statut($("a-statut"), "⏳ Connexion au serveur perdue — reconnexion…", "attente");
-      setTimeout(() => { if (!peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000);
-    });
-
-    peer.on("error", (err) => {
-      if (err.type === "unavailable-id") {
-        // La salle est encore réservée (page rechargée) ou ouverte dans un autre onglet
-        peer.destroy();
-        tentatives++;
-        if (tentatives <= 10) {
-          statut($("a-statut"), "⏳ Reprise de la salle… (si ce tableau de bord est ouvert dans un autre onglet, fermez-le)", "attente");
-          setTimeout(ouvrirSalle, 3000);
-        } else {
-          statut($("a-statut"), "🔴 Cette salle est déjà ouverte ailleurs. Fermez l'autre onglet puis rechargez, ou cliquez sur « Nouvelle session ».", "ko");
-        }
-      } else if (["network", "server-error", "socket-error", "socket-closed"].includes(err.type)) {
-        statut($("a-statut"), "⏳ Problème de connexion internet — nouvel essai…", "attente");
-        if (!peer.destroyed && peer.disconnected) setTimeout(() => { if (!peer.destroyed) peer.reconnect(); }, 3000);
-      }
-      // "peer-unavailable" etc. : sans importance côté animateur
-    });
+    if (flux) flux.close();
+    if (!flux) statut($("a-statut"), "Ouverture de la salle…", "attente");
+    const f = new EventSource(adresseSalle(salle) + "/sse?since=" + (dernierId || "all"));
+    flux = f;
+    f.onopen = () => statut($("a-statut"), "🟢 Salle ouverte — réception des réponses en direct", "ok");
+    f.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (!m || m.event !== "message" || !m.id || vus.has(m.id)) return;
+      vus.add(m.id); dernierId = m.id;
+      let d; try { d = JSON.parse(m.message); } catch (e) { return; }
+      recevoir(d);
+    };
+    f.onerror = () => {
+      if (flux !== f) return;
+      f.close();
+      statut($("a-statut"), "⏳ Connexion perdue — reconnexion automatique…", "attente");
+      setTimeout(() => { if (flux === f) ouvrirSalle(); }, 3000);
+    };
   }
 
-  // Libère la salle immédiatement si la page est rechargée ou fermée
-  window.addEventListener("beforeunload", () => { if (peer) peer.destroy(); });
-
-  // ----- Réception des réponses (tout est contrôlé et nettoyé) -----
-  function recevoir(c, d) {
-    if (!d || d.type !== "etat") return;
+  // ----- Réception d'un message (tout est contrôlé et nettoyé) -----
+  function recevoir(d) {
+    if (!d || (d.type !== "arrivee" && d.type !== "rep")) return;
     const id = txt(d.id, 40);
     if (!id) return;
-    if (!c._idPart) { c._idPart = id; enLigne[id] = (enLigne[id] || 0) + 1; }
-
-    const p = participants[id] || { arrivee: maintenant(), reponses: {} };
+    const t = txt(d.t, 40) || maintenant();
+    const p = participants[id] || { arrivee: t, reponses: {} };
     p.nom = txt(d.nom, 80); p.prenom = txt(d.prenom, 80);
-    if (d.reponses && typeof d.reponses === "object") {
-      Object.keys(d.reponses).forEach(k => {
-        const i = Number(k), r = d.reponses[k];
-        if (Number.isInteger(i) && i >= 0 && i < ETAPES.length && r && typeof r === "object") {
-          p.reponses[i] = { reponse: txt(r.reponse, 5000), t: txt(r.t, 40) };
-        }
-      });
+    if (d.type === "rep") {
+      const i = Number(d.etape);
+      if (!Number.isInteger(i) || i < 0 || i >= ETAPES.length) return;
+      const avant = p.reponses[i];
+      if (!avant || !(avant.t > t)) p.reponses[i] = { reponse: txt(d.reponse, MAX_REPONSE), t: t };
     }
     participants[id] = p;
     sauver();
-    if (typeof d.v === "number") { try { c.send({ type: "ok", v: d.v }); } catch (e) {} }
     dessiner();
   }
 
@@ -509,8 +472,8 @@ function demarrerAnimateur() {
   function dessinerMaintenant() {
     const ps = liste();
     $("nb-participants").textContent = ps.length;
-    $("nb-enligne").textContent = ps.filter(p => enLigne[p.id] > 0).length;
     $("nb-termine").textContent = ps.filter(p => Object.keys(p.reponses).length >= ETAPES.length).length;
+    $("nb-reponses").textContent = ps.reduce((s, p) => s + Object.keys(p.reponses).length, 0);
 
     let o = '<button type="button" data-vue="tout" class="' + (vueActive === "tout" ? "actif" : "") + '">Vue d\'ensemble</button>';
     ETAPES.forEach((e, i) => {
@@ -528,7 +491,7 @@ function demarrerAnimateur() {
     ETAPES.forEach((e, i) => { h += '<th class="cliquable" data-vue="' + i + '" title="Voir toutes les réponses">' + (i + 1) + ". " + esc(e.titre) + "</th>"; });
     h += "</tr></thead><tbody>";
     ps.forEach(p => {
-      h += '<tr><td class="nom"><span class="point' + (enLigne[p.id] > 0 ? " on" : "") + '"></span>' + esc(p.prenom) + " " + esc(p.nom)
+      h += '<tr><td class="nom">' + esc(p.prenom) + " " + esc(p.nom)
          + '<span class="heure">arrivée : ' + heure(p.arrivee) + "</span></td><td>" + Object.keys(p.reponses).length + " / " + ETAPES.length + "</td>";
       ETAPES.forEach((e, i) => {
         const r = p.reponses[i];
@@ -598,12 +561,11 @@ function demarrerAnimateur() {
   $("btn-nouvelle").addEventListener("click", () => {
     if (!confirm("Démarrer une nouvelle session ?\n\n• Un nouveau code et un nouveau lien seront créés.\n• Les réponses actuelles seront effacées (exportez-les en CSV avant si besoin).")) return;
     effacer("formation-animateur-" + salle);
-    if (peer) peer.destroy();
     salle = nouveauCode();
     ecrire("formation-animateur-salle", salle);
     participants = {};
-    Object.keys(enLigne).forEach(k => delete enLigne[k]);
-    vueActive = "tout"; tentatives = 0;
+    dernierId = null; vus = new Set();
+    vueActive = "tout";
     ouvrirSalle();
     dessiner();
   });
